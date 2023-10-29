@@ -1,0 +1,146 @@
+---
+title: "Práctica NoSQL"
+author: "Mihai Dobrin"
+date: "2023-10-26"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setuplibraries, include=FALSE}
+library(mongolite)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+```
+
+
+# Tarea a realizar
+
+A continuación se proponen 4 ejercicios a completar. Se recomienda completaros en script markdown de R que se proporciona.
+
+## Tarea 1
+
+Exploremos otro diagrama de barras con una colección diferente - inspections. Esta recopilación contiene datos sobre las inspecciones de edificios de la ciudad de Nueva York y si pasan o no. Recupere dicha colección en R.
+
+```{r Tarea 1}
+
+print("Completar Tarea 1")
+
+## Setting de la conexión
+conexion_mongomihai <- "mongodb+srv://Mihai:Mnl0Chm832jA4VVi@cluster0.fvn4d8x.mongodb.net/?retryWrites=true&w=majority"
+conexion_weakdb <- ssl_options(weak_cert_validation = T)
+
+inspecciones <- mongo(collection = "inspections", db = "sample_training", url = conexion_mongomihai, options = conexion_weakdb)
+
+```
+
+
+## Tarea 2
+
+Suponga que desea verificar el número de empresas que no aprobaron las inspecciones en 2015 en comparación con 2016.
+
+Si ve los datos obtenidos de la colección, notará que el campo de fecha es una Cadena. Convertirlo en tipo de fecha y luego extraer el año requerirá algún procesamiento. Pero, con la canalización de agregación de Mongodb, puede hacer todo en una sola consulta. Para manipular el campo de fecha, use el operador [$addFields](https://docs.mongodb.com/manual/reference/operator/aggregation/addFields/).
+
+Además, agrege las deficiencias encontradas en las inspecciones por año
+
+```{r Tarea 2, fig.align = 'center'}
+
+
+print("Completar Tarea 2")
+
+
+
+InspeccionesNoSuperadas2015y2016 <- inspecciones$aggregate('[{ "$addFields":
+{"AñoConvertido": {
+  "$year": {
+    "$dateFromString": {
+      "dateString": "$date"}}}}},
+      
+{
+"$match": {
+  "$and": [{ "AñoConvertido": { "$in": [2015, 2016] }}, { "result": "Fail" }]
+    }
+  },
+
+{
+"$group": {
+  "_id":"$AñoConvertido", "Num de Fails": {"$sum":1}
+  }
+}
+]')
+
+colnames(InspeccionesNoSuperadas2015y2016) <- c("Año", "Cantidad_que_fracasaron")
+InspeccionesNoSuperadas2015y2016
+
+```
+
+
+## Tarea 3
+
+Teniendo en cuenta que el resultado de la tarea anterior está agrupando los resultados por año, cree un gráfico de barras.
+
+```{r Tarea 3, fig.align = 'center'}
+
+print("Completar Tarea 3")
+
+InspeccionesNoSuperadas2015y2016 %>%
+  ggplot(aes(Año, Cantidad_que_fracasaron, fill = factor(Año))) + 
+  geom_bar(stat = "identity", color = "black", fill = c("red4","lightgreen")) +
+  theme_bw() +
+  scale_y_continuous(breaks = seq(0, 1200, by = 100)) + 
+  scale_x_continuous(breaks = c(2015,2016)) +
+  labs(title = "Número de empresas que fracasaron (2015 y 2016)",
+       x = "Años",
+       y = "Número de inspecciones fallidas") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+
+
+```
+
+
+## Tarea 4
+
+A continuación, se utilizará la colección 'companies', que contiene información sobre empresas, como su año de fundación y la dirección de su sede.
+
+Supongamos que desea conocer la tendencia del número de empresas de publicidad (category_code = 'advertising') fundadas a partir de 2000 en adelante. Para ello, utilice el operador relacional [$gt](https://docs.mongodb.com/manual/reference/operator/query/gt/), agrupe los resultados por año de creación ('founded_year') y ordénelos para que se muestren posterioremente en un gráfico de líneas por año. 
+
+```{r Tarea 4, echo=TRUE, fig.align = 'center'}
+
+print("Completar Tarea 4")
+
+companies <- mongo(collection = "companies", db = "sample_training", url = conexion_mongomihai, options = conexion_weakdb)
+
+EmpresasFundadasPost2000 <- companies$aggregate('[
+{"$match": {"category_code": "advertising", "founded_year": { "$gt" : 1999 }}},
+
+{"$group": {"_id":"$founded_year", "Num de Empresas de Publicidad": {"$sum":1}}},
+
+{"$sort": {"_id": 1}}
+]')
+
+colnames(EmpresasFundadasPost2000) <- c("Año", "Cantidad_Emp_Fundadas")
+
+tibble(EmpresasFundadasPost2000)
+
+EmpresasFundadasPost2000 %>%
+  ggplot(aes(Año, Cantidad_Emp_Fundadas)) +
+  geom_line(color = "darkred", linetype = "longdash") +
+  geom_point() +
+  # scale_x_continuous(breaks = unique(EmpresasFundadasPost2000$Año)) +
+  scale_x_continuous(breaks = seq(2000,2014, by = 1)) +
+   labs(title = "Número de empresas que se fundaron apartir de 2000",
+       x = "Años",
+       y = "Número de empresas fundadas") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme_bw()
+ 
+
+```
+
